@@ -29,6 +29,8 @@
 #endif
 }
 
+@property (nonatomic, strong) UILabel *floatView;
+
 @property (nonatomic, strong) EAGLContext             *glContext;
 @property (nonatomic, strong) NSLock                  *lock;
 

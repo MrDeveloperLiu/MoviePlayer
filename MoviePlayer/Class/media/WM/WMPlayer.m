@@ -9,12 +9,11 @@
 #import "WMPlayer.h"
 #include "fok_audio_queue_ios_render.h"
 
-
-
 @interface WMPlayer()
-@property (nonatomic, readonly) AudioQueueBufferRef *mBuf;
+{
+    AudioQueueBufferRef mBuf[FokAudioBufSize];
+}
 @property (nonatomic, readonly) AudioQueueRef audioQueue;
-@property (nonatomic, readonly) AudioQueueTimelineRef timeline;
 @property (nonatomic, readonly) NSLock *lock;
 @end
 
@@ -22,96 +21,99 @@
 @implementation WMPlayer
 
 - (void)dealloc{
-    _block = nil;
     [self stop];
 }
 
-- (instancetype)initSampleRate:(Float64)sampleRate
-               ChannelsNumber:(UInt32)channels
-               BitsPerChannel:(UInt32)bitsPerChannel
-                     frameSize:(UInt32)frameSize
-                       volume:(CGFloat)volume{
+- (instancetype)initWithAudio:(WMPlayerAudio)audio volume:(CGFloat)volume{
     if(self = [super init]){
-        _sampleRate = sampleRate;
-        _channels = channels;
+        _audio = audio;
         _volume = volume;
-        _bitsPerChannel = bitsPerChannel;
-        _frameSize = frameSize;
+        
+        fok_audio_queue_init_format(&_format,
+                                    audio.mSampleRate,
+                                    audio.mChannels,
+                                    audio.mBitsPerChannel);
+
+        
+        if (AudioQueueNewOutput(&_format,
+                                AudioPlayerAQInputCallback,
+                                (__bridge void * _Nullable)self,
+                                NULL,
+                                kCFRunLoopCommonModes,
+                                0,
+                                &_audioQueue) != noErr){
+            NSLog(@"AudioQueueNewOutput Fail");
+        }
+        if (AudioQueueSetParameter(_audioQueue, kAudioQueueParam_Volume, _volume) != noErr){
+            NSLog(@"set Volume Fail");
+        }
         _lock = [[NSLock alloc] init];
-        [self resetSetting];
+        [self audioSession];
+        UInt32 size = audio.mSampleSize;
+        for (int i = 0; i < FokAudioBufSize; i++)
+        {
+            AudioQueueAllocateBuffer(_audioQueue, size, &mBuf[i]);
+            mBuf[i]->mAudioDataByteSize = size;
+            memset(mBuf[i]->mAudioData, 0, size);
+            AudioQueueEnqueueBuffer(_audioQueue, mBuf[i], 0, NULL);
+        }
     }
     return self;
 }
 
-- (void)resetSetting{
-    @try {
-        NSError *error = nil;
-        [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&error];
-    } @catch (NSException *exception) {
-        NSLog(@"[[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:&error] : %@", exception);
+- (void)setVolume:(CGFloat)volume{
+    if (_volume != volume) {
+        [_lock lock];
+        _volume = volume;
+        if (AudioQueueSetParameter(_audioQueue, kAudioQueueParam_Volume, _volume) != noErr){
+            NSLog(@"set Volume Fail");
+        }
+        [_lock unlock];
     }
+}
 
-    AudioStreamBasicDescription format = fok_audio_queue_init_format(_sampleRate, _channels, _bitsPerChannel);
-    
-    OSStatus state = AudioQueueNewOutput(&format,
-                                         AudioPlayerAQInputCallback,
-                                         (__bridge void * _Nullable)self,
-                                         NULL,
-                                         NULL,
-                                         0,
-                                         &_audioQueue);
-    if(state != noErr){
-        NSLog(@"AudioQueueNewOutput Fail");
+- (void)audioSession{
+    NSError *error = nil;
+    @try {
+        [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback
+                                               error:&error];
+    } @catch (NSException *exception) {
+        NSLog(@"AVAudioSession : %@", error);
     }
-    state = AudioQueueSetParameter(_audioQueue, kAudioQueueParam_Volume, _volume);
-    if(state != noErr){
-        NSLog(@"set Volume Fail");
-    }
+}
+
+- (void)start{
+    if (!_audioQueue)
+        return;
     
-    UInt32 size = _frameSize * _channels * (_bitsPerChannel / 8);
-    fok_audio_queue_init_buffers(_audioQueue, &_mBuf, FokAudioBufSize, size);
-    
-    AudioQueueCreateTimeline(_audioQueue, &_timeline);
     AudioQueueStart(_audioQueue, NULL);
 }
 
-static void AudioPlayerAQInputCallback(void *inUserData, AudioQueueRef audioQueueRef, AudioQueueBufferRef audioQueueBufferRef)
-{
-    WMPlayer *player = (__bridge WMPlayer *)(inUserData);
-    if (player.block) {
-        player.block(audioQueueBufferRef->mUserData);
-    }
-    [player.lock lock];
-    fok_audio_queue_idle_buffer(player.audioQueue, player.mBuf, FokAudioBufSize, audioQueueBufferRef);
-    [player.lock unlock];
-}
 
-- (AudioTimeStamp)getCurrentTs{
-    AudioTimeStamp ts;
-    Boolean outTimelineDiscontinuity = YES;
-    AudioQueueGetCurrentTime(self.audioQueue, self.timeline, &ts, &outTimelineDiscontinuity);
-    return ts;
-}
-
-- (void)playWithData:(uint8_t *)data length:(uint32_t)length context:(void *)context{
-    [_lock lock];
-    fok_audio_queue_enqueue_buffer(_audioQueue, _mBuf, FokAudioBufSize, data, length);
-    [_lock unlock];
-}
 
 - (void)stop{
-    if (_audioQueue)
-    {
-        AudioQueueStop(_audioQueue, true);
-        
-        fok_audio_queue_dispose_buffers(_audioQueue, &_mBuf, FokAudioBufSize);
-        if (_timeline) {
-            AudioQueueDisposeTimeline(_audioQueue, _timeline);
-        }
-        
-        AudioQueueDispose(_audioQueue, true);
-        _audioQueue = nil;
+    if (!_audioQueue)
+        return;
+    
+    AudioQueueStop(_audioQueue, true);
+    for (int i = 0; i < FokAudioBufSize; i++)
+        AudioQueueFreeBuffer(_audioQueue, mBuf[i]);
+    AudioQueueDispose(_audioQueue, true);
+    _audioQueue = nil;
+}
+
+static void AudioPlayerAQInputCallback(void *inUserData,
+                                       AudioQueueRef audioQueueRef,
+                                       AudioQueueBufferRef audioQueueBufferRef)
+{
+    WMPlayer *player = (__bridge WMPlayer *)(inUserData);
+    if (player.audio.mAudioInput) {
+        player.audio.mAudioInput(audioQueueBufferRef->mAudioData,
+                                 audioQueueBufferRef->mAudioDataByteSize,
+                                 &audioQueueBufferRef->mUserData,
+                                 player.audio.mUserData);
     }
+    AudioQueueEnqueueBuffer(audioQueueRef, audioQueueBufferRef, 0, NULL);
 }
 @end
 

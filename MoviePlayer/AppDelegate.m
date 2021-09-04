@@ -17,13 +17,13 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
+    
     UIViewController *vc = [[MainViewController alloc] init];
     UINavigationController *navVc = [[UINavigationController alloc] initWithRootViewController:vc];
 
     self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
     self.window.rootViewController = navVc;
     [self.window makeKeyAndVisible];
-
 
     return YES;
 }

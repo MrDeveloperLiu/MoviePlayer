@@ -75,7 +75,7 @@ int fok_opengl_complie_shader(const GLchar *shader_code, GLint shader_len, GLenu
     if (state == GL_FALSE) {
         char messages[256];
         glGetShaderInfoLog(s, sizeof(messages), 0, &messages[0]);
-        fok_log("glCompileShader error: %s", messages);
+        gprintf("glCompileShader error: %s", messages);
         return -1;
     }
     if (shader_handle) {
@@ -97,7 +97,7 @@ int fok_opengl_create_program(GLuint *program_handle, GLuint vsh, const GLchar *
     if (state == GL_FALSE) {
         GLchar messages[256];
         glGetProgramInfoLog(program, sizeof(messages), 0, &messages[0]);
-        fok_log("glLinkProgram error: %s", messages);
+        gprintf("glLinkProgram error: %s", messages);
         return -1;
     }
     if (vsh)

@@ -10,5 +10,5 @@
 
 @interface OpenGLView20 (Render) 
 - (CGRect)glViewRect;
-- (void)render:(FokFrame *)frame;
+- (void)render:(GFrame *)frame;
 @end

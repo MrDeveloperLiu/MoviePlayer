@@ -17,7 +17,6 @@
 #define ATTRIB_VERTEX 0
 #define ATTRIB_TEXTURE 1
 
-//包含1-4象限内
 static const GLfloat gl20Vertices[] = {
     -1.0, -1.0,
     1.0, -1.0,
@@ -25,7 +24,6 @@ static const GLfloat gl20Vertices[] = {
     1.0,  1.0,
 };
 
-//1象限内
 static const GLfloat gl20Textures[] = {
     0.0, 1.0,
     1.0, 1.0,
@@ -156,13 +154,25 @@ static const GLfloat gl20Textures[] = {
     struct timeval nowtime;
     gettimeofday(&nowtime, NULL);
     if (nowtime.tv_sec != _time.tv_sec){
-        printf("帧率:   %td\n", _frameRate);
+        self.floatView.text = [NSString stringWithFormat:@"fps:%td", _frameRate];
         memcpy(&_time, &nowtime, sizeof(struct timeval));
         _frameRate = 0;
     }else{
         _frameRate++;
     }
 #endif
+}
+
+- (UILabel *)floatView{
+    if (!_floatView) {
+        _floatView = [[UILabel alloc] initWithFrame:(CGRect){20, 80, 60, 20}];
+        _floatView.font = [UIFont systemFontOfSize:15];
+        _floatView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+        _floatView.textColor = [UIColor whiteColor];
+        _floatView.textAlignment = NSTextAlignmentCenter;
+        [self addSubview:_floatView];
+    }
+    return _floatView;
 }
 
 @end

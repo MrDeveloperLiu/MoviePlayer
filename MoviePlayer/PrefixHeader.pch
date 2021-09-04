@@ -10,10 +10,23 @@
 #define PrefixHeader_pch
 
 #pragma mark - c/c++ files
-#import "LavCode.h"
-#import "libyuv.h"
-#include "fokheader.h"
 
+#include "libyuv.h"
+#include "libavformat/avformat.h"
+#include "libswscale/swscale.h"
+#include "libswresample/swresample.h"
+#include "libavutil/avutil.h"
+#include "libavutil/time.h"
+#include "libavfilter/avfilter.h"
+#include "libavdevice/avdevice.h"
+#include "libavcodec/avcodec.h"
+
+#include <sys/time.h>
+#include <unistd.h>
+
+#import "LavCode.h"
+
+#include "goplay.h"
 
 #ifdef __OBJC__
 #pragma mark - oc files only
